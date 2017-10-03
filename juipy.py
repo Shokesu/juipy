@@ -372,38 +372,48 @@ class Juipy:
         el criterio de búsqueda.
         Si es None, se podrán especificar los mismos parámetros que los que se utilizan para
         inicializar una instancia de la clase SearchCriteria.
+
+        Si se produce cualquier error al realizar la request, se genera una excepción
         '''
+        try:
+            if criteria is None:
+                criteria = SearchCriteria(*args, **kwargs)
 
-        if criteria is None:
-            criteria = SearchCriteria(*args, **kwargs)
+            # Que parámetros pasaremos a la query
+            params = criteria._parse()
+            params.update({'size' : size, 'since' : 0})
 
-        # Que parámetros pasaremos a la query
-        params = criteria._parse()
-        params.update({'size' : size, 'since' : 0})
+            # Especificamos siempre la API key
+            params['api_key'] = self.api_key
 
-        # Especificamos siempre la API key
-        params['api_key'] = self.api_key
+            # Replicamos parámetros duplicados en la url
+            params = reduce(lambda l,x:l+[x] if not isinstance(x[1], list) else\
+                l + [(x[0], value) for value in x[1]],
+                            [(key, value) for key, value in params.items()], [])
 
-        # Replicamos parámetros duplicados en la url
-        params = reduce(lambda l,x:l+[x] if not isinstance(x[1], list) else\
-            l + [(x[0], value) for value in x[1]],
-                        [(key, value) for key, value in params.items()], [])
+            self.logger.debug('Request params: {}'.format(str(params)))
 
-        self.logger.debug('Request params: {}'.format(str(params)))
+            # Construimos la query
+            query = '{}/articles?{}'.format(self.root_url, urlencode(params))
+            self.logger.debug('URL encoded: {}'.format(query))
 
-        # Construimos la query
-        query = '{}/articles?{}'.format(self.root_url, urlencode(params))
-        self.logger.debug('URL encoded: {}'.format(query))
+            # Hacemos la request
+            response = requests.get(query)
 
-        # Hacemos la request
-        response = requests.get(query)
+            # Comprobamos que la respuesta tiene código 200
+            self.logger.debug('Response status code: {}'.format(response.status_code))
+            self.logger.debug('Response headers: {}'.format(response.headers))
 
-        self.logger.debug('Response status code: {}'.format(response.status_code))
-        self.logger.debug('Response headers: {}'.format(response.headers))
+            if response.status_code != 200:
+                raise Exception('Server response with {}'.format(response.status_code))
 
-
-        # Procesamos el resultado de la request y lo codificamos en formato JSON
-        result = response.json()
+            # Procesamos el resultado de la request y lo codificamos en formato JSON
+            try:
+                result = response.json()
+            except:
+                raise Exception('Failed to decode response to JSON')
+        except Exception as e:
+            raise Exception('Request to BBC juice failed: {}'.format(*e.args))
 
     def get_sources(self):
         pass
