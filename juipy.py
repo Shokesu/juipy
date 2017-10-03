@@ -26,6 +26,7 @@ from datetime import datetime
 from functools import reduce
 from pyvalid import accepts
 from pyvalid.validators import is_validator
+from re import match, fullmatch
 
 
 
@@ -326,10 +327,52 @@ class SearchCriteria:
 
 
 
+class Article:
+    '''
+    Esta clase proporciona información relevante de los articulos
+    devueltos por la API BBC Juice
+    '''
+    def __init__(self, id, url, published_at):
+        self.id = id
+        self.url = url
+        self.published_at = published_at
+
+    def get_id(self):
+        '''
+
+        :return: Devuelve la ID del articulo en la API BBC Juice
+        '''
+        return self.id
 
 
+    def get_url(self):
+        '''
 
+        :return: Devuelve la url del articulo.
+        '''
+        return self.url
 
+    def get_published_at(self):
+        '''
+
+        :return: Devuelve una instancia de la clase datetime, que indica la fecha
+        en la que se publicó o se vió por primera vez el artículo.
+        '''
+        return self.published_at
+
+    def get_domain(self):
+        '''
+
+        :return: Devuelve el dominio de la url donde se publicó el articulo
+        '''
+        result = fullmatch(pattern = 'https?\:\/\/([^\/]+).*', string = self.get_url())
+        domain = result.group(1)
+        return domain
+
+    def __str__(self):
+        s = 'Articulo publicado en {}\n'.format(self.get_domain())
+        s += 'Publicado en {} con id = {}'.format(str(self.get_published_at()), str(self.get_id()))
+        return s
 
 class Juipy:
     '''
@@ -412,6 +455,11 @@ class Juipy:
                 result = response.json()
             except:
                 raise Exception('Failed to decode response to JSON')
+            try:
+                articles = self._parse_articles_from_response(result)
+                return articles
+            except:
+                raise Exception('Failed to extract article data from JSON')
         except Exception as e:
             raise Exception('Request to BBC juice failed: {}'.format(*e.args))
 
@@ -419,4 +467,29 @@ class Juipy:
         pass
 
 
+    @staticmethod
+    def _parse_articles_from_response(response):
+        '''
+        Este método extrae información de artículos de la respuesta a una request a la API
+        BBC Juice en formato JSON
+        :param response:
+        :return:
+        '''
+        def parse_article(data):
+            url = data['url']
+            id = data['id']
+            published_at = datetime.strptime(data['first_published_or_seen_at'], '%Y-%m-%dT%H:%M:%S.%fZ')
+            article = Article(id, url, published_at)
 
+            return article
+
+        hits = response['hits']
+        articles = []
+        for hit in hits:
+            try:
+                article = parse_article(hit)
+                articles.append(article)
+            except Exception as e:
+                print(e)
+
+        return articles
