@@ -46,6 +46,7 @@ if __name__ == '__main__':
     criteria = SearchCriteria(keywords = 'Mariano Rajoy', lang = 'es',
                               published_after = datetime(day = 1, month = 9, year = 2017))
 
-    result = juipy.search_articles(size = 10, criteria = criteria)
+    result = juipy.search_articles(size = 3, criteria = criteria)
 
-    print(result)
+    for article in result:
+        print('{0}\n{1}\n{0}\n'.format('-' * 10, str(article)))
