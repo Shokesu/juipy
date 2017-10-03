@@ -21,6 +21,7 @@ SOFTWARE.
 '''
 import requests
 import logging
+import json
 from urllib.parse import urlencode
 from datetime import datetime
 from functools import reduce
@@ -28,6 +29,7 @@ from pyvalid import accepts
 from pyvalid.validators import is_validator
 from re import match, fullmatch
 from copy import copy
+from os.path import dirname, join
 
 
 
@@ -302,10 +304,7 @@ class SearchCriteria:
 
         # Parámetro para búsqueda por fuentes de información.
         if not self.sources is None:
-            if isinstance(self.sources, list):
-                params['sources[]'] = [source for source in self.sources if isinstance(source, int)]
-            else:
-                params['sources[]'] = self.sources
+            params['sources[]'] = self.sources
 
         # Parámetro para búsqueda por facets
         if not self.facets is None:
@@ -424,6 +423,9 @@ class Juipy:
         # Logger para mostrar información de depuración
         self.logger = logging.getLogger(__name__)
 
+        # Información sobre las fuentes de información de BBC Juice
+        self.sources = None
+
     def get_logger(self):
         '''
         :return: Devuelve el objeto que es usado para mostrar información de depuración
@@ -433,7 +435,7 @@ class Juipy:
 
 
     @accepts(object, size = int, since = int, criteria = SearchCriteria)
-    def search_articles(self, size = 10, since = 0, criteria = None, *args, **kwargs):
+    def search_articles(self, size = 10, since = 0, criteria = None, timeout = None, *args, **kwargs):
         '''
         Busca articulos publicados en distintas fuentes.
         :size Es el número de articulos a devolver. Por defecto, 10
@@ -444,7 +446,7 @@ class Juipy:
         el criterio de búsqueda.
         Si es None, se podrán especificar los mismos parámetros que los que se utilizan para
         inicializar una instancia de la clase SearchCriteria.
-
+        :param timeout: Será el timeout de la request, por defecto no habrá timeout.
         Si se produce cualquier error al realizar la request, se genera una excepción
         '''
         try:
@@ -455,8 +457,33 @@ class Juipy:
             params = criteria._parse()
             params.update({'size' : size, 'since' : 0})
 
+            # El parámetro sources[] solo puede tener IDs y no nombres.
+            # Realizamos una conversión...
+            if ('sources[]' in params) and\
+                    (isinstance(params['sources[]'], str) or len([source for source in params['sources[]'] if isinstance(source, str)]) > 0):
+                if self.sources is None:
+                    try:
+                        self.sources = self.get_sources(timeout = 10)
+                    except:
+                        raise Exception('Failed to fetch source info data')
+
+                try:
+                    def get_source_id_by_name(name):
+                        return [source.get_id() for source in self.sources if source.get_name() == name][0]
+
+                    names = params['sources[]']
+                    if isinstance(names, str):
+                        ids = get_source_id_by_name(names)
+                    else:
+                        ids = [get_source_id_by_name(name) for name in names]
+
+                    params['sources[]'] = ids
+                except:
+                    raise Exception('Failed to translate source names to IDs')
+
+
             # Hacemos la request
-            result = self._request('articles', params)
+            result = self._request('articles', params, timeout)
 
             try:
                 articles = self._parse_articles_from_response(result)
@@ -467,14 +494,17 @@ class Juipy:
             raise Exception('Request to BBC juice ({}) failed: {}'.format('articles', *e.args))
 
 
-    def get_sources(self):
+    def get_sources(self, timeout = None):
         '''
-
+        Consulta las fuentes de información de la API BBC Juice
+        :param timeout: Será el timeout de la request, por defecto no habrá timeout.
         :return: Devuelve una lista de todas las fuentes de información de BBC
         Juice (una lista con instancias de la clase Source)
         '''
         try:
-            result = self._request('sources')
+            #result = self._request('sources', timeout = timeout)
+            with open(join(dirname(__file__), 'data', 'sources.json'), 'r') as sources_file_handler:
+                result = json.loads(sources_file_handler.read())
             try:
                 sources = self._parse_sources_from_response(result)
                 return sources
@@ -483,7 +513,8 @@ class Juipy:
         except Exception as e:
             raise Exception('Request to BBC juice ({}) failed: {}'.format('sources', *e.args))
 
-    def _request(self, endpoint, params = {}, timeout = 20):
+
+    def _request(self, endpoint, params = {}, timeout = None):
         '''
         Lanza una request sobre la API de BBC Juice.
         :param params: Son los parámetros de la request, en forma de diccionario
