@@ -460,7 +460,7 @@ class Juipy:
             # El parámetro sources[] solo puede tener IDs y no nombres.
             # Realizamos una conversión...
             if ('sources[]' in params) and\
-                    (isinstance(params['sources[]'], str) or len([source for source in params['sources[]'] if isinstance(source, str)]) > 0):
+                    (isinstance(params['sources[]'], str) or (isinstance(params['sources[]'],list) and len([source for source in params['sources[]'] if isinstance(source, str)]) > 0)):
                 if self.sources is None:
                     try:
                         self.sources = self.get_sources(timeout = 10)
