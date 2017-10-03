@@ -531,6 +531,8 @@ class Juipy:
             l + [(x[0], value) for value in x[1]],
                         [(key, value) for key, value in params.items()], [])
 
+        self.logger.debug('Request params: {}'.format(str(params)))
+
         # Construimos la query
         query = '{}/{}?{}'.format(self.root_url, endpoint, urlencode(params))
         self.logger.debug('URL encoded: {}'.format(query))
