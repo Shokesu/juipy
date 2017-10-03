@@ -372,6 +372,7 @@ class Article:
 
     def __str__(self):
         s = 'Articulo publicado en {}\n'.format(self.get_domain())
+        s += '{}\n'.format(self.get_url())
         s += 'Publicado en {} con id = {}'.format(str(self.get_published_at()), str(self.get_id()))
         return s
 
