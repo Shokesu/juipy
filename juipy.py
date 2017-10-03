@@ -27,7 +27,7 @@ from functools import reduce
 from pyvalid import accepts
 from pyvalid.validators import is_validator
 from re import match, fullmatch
-
+from copy import copy
 
 
 
@@ -377,6 +377,32 @@ class Article:
         return s
 
 
+class Source:
+    '''
+    Representa una fuente de información desde donde BBC Juice extrae y consulta
+    articulos
+    '''
+    def __init__(self, id, name):
+        self.id = id
+        self.name = name
+
+    def get_id(self):
+        '''
+
+        :return: Devuelve la ID de la fuente
+        '''
+        return self.id
+
+    def get_name(self):
+        '''
+        :return: Devuelve el nombre de la fuente
+        '''
+        return self.name
+
+    def __str__(self):
+        return self.get_name()
+
+
 class Juipy:
     '''
     Esta clase permite obtener información de articulos, canales de TV y otras fuentes
@@ -429,45 +455,70 @@ class Juipy:
             params = criteria._parse()
             params.update({'size' : size, 'since' : 0})
 
-            # Especificamos siempre la API key
-            params['api_key'] = self.api_key
-
-            # Replicamos parámetros duplicados en la url
-            params = reduce(lambda l,x:l+[x] if not isinstance(x[1], list) else\
-                l + [(x[0], value) for value in x[1]],
-                            [(key, value) for key, value in params.items()], [])
-
-            self.logger.debug('Request params: {}'.format(str(params)))
-
-            # Construimos la query
-            query = '{}/articles?{}'.format(self.root_url, urlencode(params))
-            self.logger.debug('URL encoded: {}'.format(query))
-
             # Hacemos la request
-            response = requests.get(query)
+            result = self._request('articles', params)
 
-            # Comprobamos que la respuesta tiene código 200
-            self.logger.debug('Response status code: {}'.format(response.status_code))
-            self.logger.debug('Response headers: {}'.format(response.headers))
-
-            if response.status_code != 200:
-                raise Exception('Server response with {}'.format(response.status_code))
-
-            # Procesamos el resultado de la request y lo codificamos en formato JSON
-            try:
-                result = response.json()
-            except:
-                raise Exception('Failed to decode response to JSON')
             try:
                 articles = self._parse_articles_from_response(result)
                 return articles
             except:
-                raise Exception('Failed to extract article data from JSON')
+                raise Exception('Failed to extract article data from JSON response')
         except Exception as e:
-            raise Exception('Request to BBC juice failed: {}'.format(*e.args))
+            raise Exception('Request to BBC juice ({}) failed: {}'.format('articles', *e.args))
+
 
     def get_sources(self):
-        pass
+        '''
+
+        :return: Devuelve una lista de todas las fuentes de información de BBC
+        Juice (una lista con instancias de la clase Source)
+        '''
+        try:
+            result = self._request('sources')
+            try:
+                sources = self._parse_sources_from_response(result)
+                return sources
+            except:
+                raise Exception('Failed to extract source info data from JSON response')
+        except Exception as e:
+            raise Exception('Request to BBC juice ({}) failed: {}'.format('sources', *e.args))
+
+    def _request(self, endpoint, params = {}, timeout = 20):
+        '''
+        Lanza una request sobre la API de BBC Juice.
+        :param params: Son los parámetros de la request, en forma de diccionario
+        (no se necesario especificar la clave API)
+        :return: Devuelve el cuerpo de la respuesta codificado en JSON
+        '''
+        params = copy(params)
+
+        # Especificamos también la API key
+        params['api_key'] = self.api_key
+
+        # Replicamos parámetros duplicados en la url
+        params = reduce(lambda l, x: l + [x] if not isinstance(x[1], list) else \
+            l + [(x[0], value) for value in x[1]],
+                        [(key, value) for key, value in params.items()], [])
+
+        # Construimos la query
+        query = '{}/{}?{}'.format(self.root_url, endpoint, urlencode(params))
+        self.logger.debug('URL encoded: {}'.format(query))
+
+        # Hacemos la request
+        response = requests.get(query, timeout = timeout)
+
+        # Comprobamos que la respuesta tiene código 200
+        self.logger.debug('Response status code: {}'.format(response.status_code))
+        self.logger.debug('Response headers: {}'.format(response.headers))
+
+        if response.status_code != 200:
+            raise Exception('Server response with {}'.format(response.status_code))
+
+        try:
+            result = response.json()
+            return result
+        except:
+            raise Exception('Failed to decode response to JSON')
 
 
     @staticmethod
@@ -496,3 +547,26 @@ class Juipy:
                 print(e)
 
         return articles
+
+    @staticmethod
+    def _parse_sources_from_response(response):
+        '''
+        Este método extra información de fuentes de información del cuerpo de la respuesta a una request
+        de la API BBC Juice codificada en formato JSON
+        :param response:
+        :return:
+        '''
+        def parse_source(data):
+            id = int(data['id'])
+            name = data['name']
+            source = Source(id, name)
+            return source
+
+        sources = []
+        for data in response:
+            try:
+                source = parse_source(data)
+                sources.append(source)
+            except:
+                pass
+        return sources
