@@ -332,6 +332,7 @@ class Article:
     Esta clase proporciona información relevante de los articulos
     devueltos por la API BBC Juice
     '''
+    @accepts(object, int, str, datetime)
     def __init__(self, id, url, published_at):
         self.id = id
         self.url = url
@@ -373,6 +374,7 @@ class Article:
         s = 'Articulo publicado en {}\n'.format(self.get_domain())
         s += 'Publicado en {} con id = {}'.format(str(self.get_published_at()), str(self.get_id()))
         return s
+
 
 class Juipy:
     '''
@@ -477,7 +479,7 @@ class Juipy:
         '''
         def parse_article(data):
             url = data['url']
-            id = data['id']
+            id = int(data['id'])
             published_at = datetime.strptime(data['first_published_or_seen_at'], '%Y-%m-%dT%H:%M:%S.%fZ')
             article = Article(id, url, published_at)
 
